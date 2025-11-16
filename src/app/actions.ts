@@ -2,7 +2,7 @@
 
 export async function processCnpjs(cnpjs: string[], referenceMonth: string) {
   try {
-    const response = await fetch("http://localhost:4030/process-cnpjs", {
+    const response = await fetch("http://191.240.202.17:4030/process-cnpjs", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -33,7 +33,7 @@ export async function processCnpjs(cnpjs: string[], referenceMonth: string) {
 
 export async function getTaskStatus(taskId: string) {
   try {
-    const response = await fetch(`http://localhost:4030/task/${taskId}`, {
+    const response = await fetch(`http://191.240.202.17:4030/task/${taskId}`, {
       credentials: "include"
     });
     
@@ -54,7 +54,7 @@ export async function getTaskStatus(taskId: string) {
 
 export async function downloadDas(taskId: string) {
   try {
-    const response = await fetch(`http://localhost:4030/download/${taskId}`, {
+    const response = await fetch(`http://191.240.202.17:4030/download/${taskId}`, {
       credentials: "include"
     });
     
