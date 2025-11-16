@@ -21,9 +21,14 @@ export async function processCnpjs(cnpjs: string[], referenceMonth: string) {
     }
 
     return data;
-  } catch (error: any) {
+} catch (error: unknown) {
+  if (error instanceof Error) {
     throw new Error(error.message);
+  } else {
+    // caso o erro não seja um Error
+    throw new Error(String(error));
   }
+}
 }
 
 export async function getTaskStatus(taskId: string) {
@@ -37,9 +42,14 @@ export async function getTaskStatus(taskId: string) {
     }
 
     return await response.json();
-  } catch (error: any) {
+  } catch (error: unknown) {
+  if (error instanceof Error) {
     throw new Error(error.message);
+  } else {
+    // caso o erro não seja um Error
+    throw new Error(String(error));
   }
+}
 }
 
 export async function downloadDas(taskId: string, referenceMonth: string) {
@@ -54,7 +64,12 @@ export async function downloadDas(taskId: string, referenceMonth: string) {
 
     const blob = await response.blob();
     return blob;
-  } catch (error: any) {
+  } catch (error: unknown) {
+  if (error instanceof Error) {
     throw new Error(error.message);
+  } else {
+    // caso o erro não seja um Error
+    throw new Error(String(error));
   }
+}
 } 
