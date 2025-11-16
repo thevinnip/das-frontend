@@ -182,9 +182,14 @@ export default function Home() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (err: any) {
-      setError(err.message);
-    }
+   catch (err: unknown) {
+  if (err instanceof Error) {
+    setError(err.message);
+  } else {
+    setError(String(err)); // caso seja outro tipo de erro
+  }
+}
+
   };
 
   const handleCopyErrorCnpjs = () => {
