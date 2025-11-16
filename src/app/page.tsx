@@ -99,10 +99,13 @@ export default function Home() {
               handleDownload();
             }
           }
-        } catch (error: any) {
-          console.error('Erro ao buscar status:', error);
-          setError(error.message);
-        }
+        } catch (err: unknown) {
+  if (err instanceof Error) {
+    setError(err.message);
+  } else {
+    setError(String(err)); // caso seja outro tipo de erro
+  }
+}
       }, 1000);
 
       return () => clearInterval(interval);
@@ -162,9 +165,13 @@ export default function Home() {
       const data = await processCnpjs(cnpjList, referenceMonth);
       setTaskId(data.taskId);
       setSuccess(`Processamento iniciado! Total de CNPJs: ${data.totalCnpjs}`);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
+    } catch (err: unknown) {
+  if (err instanceof Error) {
+    setError(err.message);
+  } else {
+    setError(String(err)); // caso seja outro tipo de erro
+  }
+} finally {
       setLoading(false);
     }
   };
@@ -182,7 +189,7 @@ export default function Home() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-   catch (err: unknown) {
+}   catch (err: unknown) {
   if (err instanceof Error) {
     setError(err.message);
   } else {
