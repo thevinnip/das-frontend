@@ -52,7 +52,7 @@ export async function getTaskStatus(taskId: string) {
 }
 }
 
-export async function downloadDas(taskId: string, referenceMonth: string) {
+export async function downloadDas(taskId: string) {
   try {
     const response = await fetch(`http://localhost:4030/download/${taskId}`, {
       credentials: "include"

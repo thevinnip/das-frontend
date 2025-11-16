@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { processCnpjs, getTaskStatus, downloadDas } from "./actions";
 
 interface TaskProgress {
@@ -26,7 +25,7 @@ interface Task {
 }
 
 export default function Home() {
-  const [cnpjs, setCnpjs] = useState<string>("");
+//  const [cnpjs, setCnpjs] = useState<string>("");
   const [cnpjList, setCnpjList] = useState<string[]>([]);
   const [currentCnpj, setCurrentCnpj] = useState<string>("");
   const [month, setMonth] = useState<string>("");
@@ -180,7 +179,7 @@ export default function Home() {
     if (!taskId) return;
 
     try {
-      const blob = await downloadDas(taskId, `${month}/${year}`);
+      const blob = await downloadDas(taskId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
