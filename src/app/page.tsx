@@ -107,7 +107,7 @@ export default function Home() {
 
       return () => clearInterval(interval);
     }
-  }, [taskId]);
+  }, [taskId, handleDownload]);
 
   const handleAddCnpj = () => {
     if (!currentCnpj.trim()) return;
