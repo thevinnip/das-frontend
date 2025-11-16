@@ -140,12 +140,12 @@ export default function Home() {
     setCnpjList(cnpjList.filter(cnpj => cnpj !== cnpjToRemove));
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAddCnpj();
-    }
-  };
+//  const handleKeyPress = (e: React.KeyboardEvent) => {
+  //  if (e.key === 'Enter') {
+//      e.preventDefault();
+  //    handleAddCnpj();
+   // }
+//  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
