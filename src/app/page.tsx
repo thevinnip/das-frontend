@@ -352,6 +352,8 @@ export default function Home() {
                 className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 required
               >
+                <option value={(currentYear-2).toString()}>{currentYear-2}</option>
+                <option value={(currentYear-1).toString()}>{currentYear-1}</option>
                 <option value={currentYear.toString()}>{currentYear}</option>
               </select>
             </div>
