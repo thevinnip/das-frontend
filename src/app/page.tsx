@@ -334,7 +334,7 @@ export default function Home() {
                   <option 
                     key={m.value} 
                     value={m.value}
-                    disabled={parseInt(m.value) >= currentMonth && year === currentYear.toString()}
+                    disabled={parseInt(m.value) > currentMonth && year === currentYear.toString()}
                   >
                     {m.label}
                   </option>
