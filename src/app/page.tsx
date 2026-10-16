@@ -110,6 +110,7 @@ export default function Home() {
   const [task, setTask] = useState<Task | null>(null);
   const [reconnecting, setReconnecting] = useState<boolean>(false);
   const [pollGeneration, setPollGeneration] = useState<number>(0);
+  const [restoredSession, setRestoredSession] = useState<StoredSession | null>(null);
 
   const months = [
     { value: "01", label: "Janeiro" },
@@ -162,16 +163,12 @@ export default function Home() {
     const session = readSession();
     if (!session?.taskId) return;
 
+    setRestoredSession(session);
     setTaskId(session.taskId);
     if (session.month) setMonth(session.month);
     if (session.year) setYear(session.year);
     if (session.cnpjList?.length) setCnpjList(session.cnpjList);
     if (session.task) setTask(session.task);
-    setSuccess(
-      session.task?.status === "completed" || session.task?.status === "error"
-        ? "Acompanhamento recuperado."
-        : "Acompanhamento recuperado. Continuando de onde parou."
-    );
   }, []);
 
   useEffect(() => {
@@ -192,6 +189,8 @@ export default function Home() {
 
     const tick = async () => {
       if (cancelled || stopped || inFlight) return;
+      const session = readSession();
+      if (!session || session.taskId !== taskId) return;
       inFlight = true;
 
       try {
@@ -312,12 +311,57 @@ export default function Home() {
    // }
 //  };
 
+  const discardCurrentTask = (options?: { confirmIfRunning?: boolean; keepForm?: boolean }) => {
+    const confirmIfRunning = options?.confirmIfRunning ?? true;
+    const isRunning =
+      task?.status === "processing" ||
+      task?.status === "pending" ||
+      Boolean(taskId && !task);
+
+    if (
+      confirmIfRunning &&
+      isRunning &&
+      !window.confirm(
+        "O processamento continua no servidor, mas você deixa de acompanhar nesta tela. Descartar mesmo assim?"
+      )
+    ) {
+      return false;
+    }
+
+    const previousTaskId = taskId || readSession()?.taskId;
+    if (previousTaskId) {
+      downloadsStarted.delete(previousTaskId);
+    }
+
+    clearSession();
+    setPollGeneration((current) => current + 1);
+    setTaskId("");
+    setTask(null);
+    setReconnecting(false);
+    setRestoredSession(null);
+    setSuccess("");
+    setError("");
+
+    if (!options?.keepForm) {
+      setCnpjList([]);
+      setMonth("");
+      setCurrentCnpj("");
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cnpjList.length === 0) {
       setError("Adicione pelo menos um CNPJ");
       return;
     }
+
+    if (taskId) {
+      discardCurrentTask({ confirmIfRunning: false, keepForm: true });
+    }
+
     setLoading(true);
     setError("");
     setSuccess("");
@@ -334,6 +378,7 @@ export default function Home() {
         downloadPending: true,
       });
       downloadsStarted.delete(data.taskId);
+      setRestoredSession(null);
       setTask(null);
       setReconnecting(false);
       setTaskId(data.taskId);
@@ -369,13 +414,23 @@ export default function Home() {
   };
 
   const handleDismiss = () => {
-    clearSession();
-    setTaskId("");
-    setTask(null);
-    setReconnecting(false);
-    setSuccess("");
-    setError("");
+    discardCurrentTask({ keepForm: true });
   };
+
+  const handleDismissAll = () => {
+    discardCurrentTask({ keepForm: false });
+  };
+
+  const taskStatusLabel =
+    task?.status === "completed"
+      ? "Concluída"
+      : task?.status === "error"
+        ? "Finalizada com erros"
+        : task?.status === "processing"
+          ? "Em andamento"
+          : taskId
+            ? "Aguardando status"
+            : "";
 
   const handleCopyErrorCnpjs = () => {
     if (!task) return;
@@ -409,6 +464,33 @@ export default function Home() {
           <p className="text-gray-400">Gere seus DAS de forma rápida e simples</p>
         </div>
         
+        {restoredSession && taskId && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 p-4 bg-blue-900/20 border border-blue-500/40 rounded-xl">
+            <div>
+              <p className="text-blue-100 font-medium">Processamento salvo neste navegador</p>
+              <p className="text-sm text-blue-200/80">
+                Referência {restoredSession.month}/{restoredSession.year} · {restoredSession.cnpjList.length} CNPJ(s)
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setRestoredSession(null)}
+                className="px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded-lg text-sm"
+              >
+                Ok, entendi
+              </button>
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
+              >
+                Descartar task
+              </button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6 bg-gray-800/50 backdrop-blur-sm p-8 rounded-xl shadow-2xl border border-gray-700">
           <div>
             <label className="block text-sm font-medium mb-2 text-gray-300">
@@ -586,18 +668,30 @@ export default function Home() {
 
         {(task || taskId) && (
           <div className="mt-8 bg-gray-800/50 backdrop-blur-sm p-6 rounded-xl shadow-2xl border border-gray-700">
-            <div className="flex justify-between items-center mb-6 gap-4">
+            <div className="flex flex-wrap justify-between items-start mb-6 gap-4">
               <div>
                 <h2 className="text-xl font-semibold">Progresso do Processamento</h2>
+                {taskStatusLabel && (
+                  <p className="mt-1 text-sm text-gray-400">Status: {taskStatusLabel}</p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={handleDismiss}
-                  className="mt-1 text-sm text-gray-400 hover:text-gray-200"
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
                 >
-                  Limpar acompanhamento
+                  Descartar task (manter CNPJs)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissAll}
+                  className="px-4 py-2 bg-red-900/40 hover:bg-red-900/60 text-red-200 rounded-lg text-sm border border-red-500/30"
+                >
+                  Descartar tudo
                 </button>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-4 w-full sm:w-auto sm:ml-auto">
                 <div className="text-center">
                   <p className="text-sm text-gray-400">Processados</p>
                   <p className="text-lg font-semibold">{task ? `${task.totalProcessed}/${task.cnpjs.length}` : "..."}</p>
@@ -711,12 +805,19 @@ export default function Home() {
         )}
 
         {task?.status === 'completed' && (
-          <div className="mt-6 text-center">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={handleDownload}
               className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium py-3 px-6 rounded-lg transition-all transform hover:scale-[1.02] shadow-lg"
             >
               Baixar DAS
+            </button>
+            <button
+              type="button"
+              onClick={handleDismiss}
+              className="px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
+            >
+              Descartar task
             </button>
           </div>
         )}
