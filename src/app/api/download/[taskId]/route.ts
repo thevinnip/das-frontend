@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { DAS_API_URL } from "@/lib/backend";
+import { fetchDasBackend } from "@/lib/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +14,7 @@ export async function GET(
   }
 
   try {
-    const response = await fetch(`${DAS_API_URL}/download/${encodeURIComponent(taskId)}`, {
-      cache: "no-store",
-    });
+    const response = await fetchDasBackend(`/download/${encodeURIComponent(taskId)}`);
 
     if (!response.ok) {
       const data = await response.json().catch(() => null);
@@ -38,10 +36,9 @@ export async function GET(
         "Cache-Control": "no-store",
       },
     });
-  } catch {
-    return NextResponse.json(
-      { error: "Falha ao baixar o arquivo" },
-      { status: 502 }
-    );
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Falha ao baixar o arquivo";
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }

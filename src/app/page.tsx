@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { processCnpjs } from "./actions";
 
 interface TaskProgress {
   cnpj: string;
@@ -368,7 +367,15 @@ export default function Home() {
 
     try {
       const referenceMonth = `${month}/${year}`;
-      const data = await processCnpjs(cnpjList, referenceMonth);
+      const response = await fetch("/api/process-cnpjs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cnpjs: cnpjList, referenceMonth }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || "Erro ao processar CNPJs");
+      }
       writeSession({
         taskId: data.taskId,
         month,
