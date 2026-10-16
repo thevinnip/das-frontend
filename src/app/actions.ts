@@ -1,8 +1,10 @@
 'use server';
 
+import { DAS_API_URL } from "@/lib/backend";
+
 export async function processCnpjs(cnpjs: string[], referenceMonth: string) {
   try {
-    const response = await fetch("http://192.99.145.94:4031/process-cnpjs", {
+    const response = await fetch(`${DAS_API_URL}/process-cnpjs`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -21,55 +23,11 @@ export async function processCnpjs(cnpjs: string[], referenceMonth: string) {
     }
 
     return data;
-} catch (error: unknown) {
-  if (error instanceof Error) {
-    throw new Error(error.message);
-  } else {
-    // caso o erro não seja um Error
-    throw new Error(String(error));
-  }
-}
-}
-
-export async function getTaskStatus(taskId: string) {
-  try {
-    const response = await fetch(`http://192.99.145.94:4031/task/${taskId}`, {
-      credentials: "include"
-    });
-    
-    if (!response.ok) {
-      throw new Error("Erro ao buscar status da task");
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      throw new Error(error.message);
     }
 
-    return await response.json();
-  } catch (error: unknown) {
-  if (error instanceof Error) {
-    throw new Error(error.message);
-  } else {
-    // caso o erro não seja um Error
     throw new Error(String(error));
   }
 }
-}
-
-export async function downloadDas(taskId: string) {
-  try {
-    const response = await fetch(`http://192.99.145.94:4031/download/${taskId}`, {
-      credentials: "include"
-    });
-    
-    if (!response.ok) {
-      throw new Error("Erro ao baixar arquivo");
-    }
-
-    const blob = await response.blob();
-    return blob;
-  } catch (error: unknown) {
-  if (error instanceof Error) {
-    throw new Error(error.message);
-  } else {
-    // caso o erro não seja um Error
-    throw new Error(String(error));
-  }
-}
-} 

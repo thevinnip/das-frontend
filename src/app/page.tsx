@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { processCnpjs, getTaskStatus, downloadDas } from "./actions";
+import { processCnpjs } from "./actions";
 
 interface TaskProgress {
   cnpj: string;
@@ -24,6 +24,77 @@ interface Task {
   totalError: number;
 }
 
+const STORAGE_KEY = "das-session";
+
+interface StoredSession {
+  taskId: string;
+  month: string;
+  year: string;
+  cnpjList: string[];
+  task: Task | null;
+  downloadPending: boolean;
+}
+
+const downloadsStarted = new Set<string>();
+
+function readSession(): StoredSession | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredSession;
+    if (!parsed?.taskId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(session: StoredSession) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+}
+
+function updateSession(patch: Partial<StoredSession>) {
+  const current = readSession();
+  if (!current) return;
+  writeSession({ ...current, ...patch });
+}
+
+function clearSession() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+async function downloadTaskZip(taskId: string, month: string, year: string) {
+  const response = await fetch(`/api/download/${encodeURIComponent(taskId)}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let message = "Erro ao baixar arquivo";
+    try {
+      const body = await response.json();
+      if (body?.error) message = String(body.error);
+    } catch {
+      // a resposta de erro nem sempre vem em JSON
+    }
+    throw new Error(message);
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+    throw new Error("O arquivo recebido não é um ZIP válido");
+  }
+
+  const blob = new Blob([bytes], { type: "application/zip" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `das_${month}_${year}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
 export default function Home() {
 //  const [cnpjs, setCnpjs] = useState<string>("");
   const [cnpjList, setCnpjList] = useState<string[]>([]);
@@ -37,6 +108,8 @@ export default function Home() {
   const [vencimento, setVencimento] = useState<string>("");
   const [diasRestantes, setDiasRestantes] = useState<number>(0);
   const [task, setTask] = useState<Task | null>(null);
+  const [reconnecting, setReconnecting] = useState<boolean>(false);
+  const [pollGeneration, setPollGeneration] = useState<number>(0);
 
   const months = [
     { value: "01", label: "Janeiro" },
@@ -86,30 +159,120 @@ export default function Home() {
   }, [month, year]);
 
   useEffect(() => {
-    if (taskId) {
-      const interval = setInterval(async () => {
-        try {
-          const data = await getTaskStatus(taskId);
-          setTask(data);
-          
-          if (data.status === 'completed' || data.status === 'error') {
-            clearInterval(interval);
-            if (data.status === 'completed' && data.totalSuccess > 0) {
-              handleDownload();
+    const session = readSession();
+    if (!session?.taskId) return;
+
+    setTaskId(session.taskId);
+    if (session.month) setMonth(session.month);
+    if (session.year) setYear(session.year);
+    if (session.cnpjList?.length) setCnpjList(session.cnpjList);
+    if (session.task) setTask(session.task);
+    setSuccess(
+      session.task?.status === "completed" || session.task?.status === "error"
+        ? "Acompanhamento recuperado."
+        : "Acompanhamento recuperado. Continuando de onde parou."
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!taskId) return;
+
+    let cancelled = false;
+    let stopped = false;
+    let timer = 0;
+    let inFlight = false;
+    let delay = 2000;
+
+    const schedule = (ms: number) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void tick();
+      }, ms);
+    };
+
+    const tick = async () => {
+      if (cancelled || stopped || inFlight) return;
+      inFlight = true;
+
+      try {
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}`, {
+          cache: "no-store",
+        });
+
+        if (cancelled) return;
+
+        if (response.status === 404) {
+          clearSession();
+          setReconnecting(false);
+          setTaskId("");
+          setError("Esse processamento não está mais no servidor. Os CNPJs continuam na lista para você gerar de novo.");
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error("Falha ao consultar status");
+        }
+
+        const data = (await response.json()) as Task;
+        if (cancelled) return;
+
+        delay = 2000;
+        setReconnecting(false);
+        setError("");
+        setTask(data);
+        updateSession({ task: data });
+
+        if (data.status === "completed" || data.status === "error") {
+          stopped = true;
+          const session = readSession();
+          if (data.status === "completed" && data.totalSuccess > 0 && session?.downloadPending && !downloadsStarted.has(taskId)) {
+            downloadsStarted.add(taskId);
+            try {
+              await downloadTaskZip(taskId, session.month, session.year);
+              updateSession({ downloadPending: false });
+              setError("");
+            } catch (err: unknown) {
+              downloadsStarted.delete(taskId);
+              setError(err instanceof Error ? err.message : "Erro ao baixar arquivo");
             }
           }
-        } catch (err: unknown) {
-  if (err instanceof Error) {
-    setError(err.message);
-  } else {
-    setError(String(err)); // caso seja outro tipo de erro
-  }
-}
-      }, 1000);
+          return;
+        }
 
-      return () => clearInterval(interval);
-    }
-  }, [taskId]);
+        schedule(delay);
+      } catch {
+        if (cancelled) return;
+        setReconnecting(true);
+        delay = Math.min(Math.max(delay * 2, 2000), 15000);
+        schedule(delay);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const wake = () => {
+      if (cancelled || stopped || document.hidden) return;
+      delay = 2000;
+      window.clearTimeout(timer);
+      void tick();
+    };
+
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", wake);
+
+    void tick();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", wake);
+    };
+  }, [taskId, pollGeneration]);
 
   const handleAddCnpj = () => {
     if (!currentCnpj.trim()) return;
@@ -162,6 +325,17 @@ export default function Home() {
     try {
       const referenceMonth = `${month}/${year}`;
       const data = await processCnpjs(cnpjList, referenceMonth);
+      writeSession({
+        taskId: data.taskId,
+        month,
+        year,
+        cnpjList,
+        task: null,
+        downloadPending: true,
+      });
+      downloadsStarted.delete(data.taskId);
+      setTask(null);
+      setReconnecting(false);
       setTaskId(data.taskId);
       setSuccess(`Processamento iniciado! Total de CNPJs: ${data.totalCnpjs}`);
     } catch (err: unknown) {
@@ -176,26 +350,31 @@ export default function Home() {
   };
 
   const handleDownload = async () => {
-    if (!taskId) return;
+    const session = readSession();
+    const id = taskId || session?.taskId;
+    if (!id) return;
 
     try {
-      const blob = await downloadDas(taskId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `das_${month}_${year}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-}   catch (err: unknown) {
-  if (err instanceof Error) {
-    setError(err.message);
-  } else {
-    setError(String(err)); // caso seja outro tipo de erro
-  }
-}
+      await downloadTaskZip(id, session?.month || month, session?.year || year);
+      updateSession({ downloadPending: false });
+      downloadsStarted.add(id);
+      setError("");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(String(err));
+      }
+    }
+  };
 
+  const handleDismiss = () => {
+    clearSession();
+    setTaskId("");
+    setTask(null);
+    setReconnecting(false);
+    setSuccess("");
+    setError("");
   };
 
   const handleCopyErrorCnpjs = () => {
@@ -405,27 +584,51 @@ export default function Home() {
           </button>
         </form>
 
-        {task && (
+        {(task || taskId) && (
           <div className="mt-8 bg-gray-800/50 backdrop-blur-sm p-6 rounded-xl shadow-2xl border border-gray-700">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">Progresso do Processamento</h2>
+            <div className="flex justify-between items-center mb-6 gap-4">
+              <div>
+                <h2 className="text-xl font-semibold">Progresso do Processamento</h2>
+                <button
+                  type="button"
+                  onClick={handleDismiss}
+                  className="mt-1 text-sm text-gray-400 hover:text-gray-200"
+                >
+                  Limpar acompanhamento
+                </button>
+              </div>
               <div className="flex gap-4">
                 <div className="text-center">
                   <p className="text-sm text-gray-400">Processados</p>
-                  <p className="text-lg font-semibold">{task.totalProcessed}/{task.cnpjs.length}</p>
+                  <p className="text-lg font-semibold">{task ? `${task.totalProcessed}/${task.cnpjs.length}` : "..."}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-400">Sucesso</p>
-                  <p className="text-lg font-semibold text-green-400">{task.totalSuccess}</p>
+                  <p className="text-lg font-semibold text-green-400">{task?.totalSuccess ?? 0}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-400">Erros</p>
-                  <p className="text-lg font-semibold text-red-400">{task.totalError}</p>
+                  <p className="text-lg font-semibold text-red-400">{task?.totalError ?? 0}</p>
                 </div>
               </div>
             </div>
 
-            {task.totalError > 0 && (
+            {reconnecting && (
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 p-4 bg-amber-900/20 border border-amber-500/40 rounded-lg">
+                <p className="text-amber-200 text-sm">
+                  A conexão caiu. O acompanhamento continua e o status volta sozinho.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setPollGeneration((current) => current + 1)}
+                  className="px-3 py-2 bg-amber-700 hover:bg-amber-600 rounded-lg text-sm"
+                >
+                  Atualizar agora
+                </button>
+              </div>
+            )}
+
+            {task && task.totalError > 0 && (
               <div className="mb-6">
                 <button
                   onClick={handleCopyErrorCnpjs}
@@ -440,7 +643,10 @@ export default function Home() {
             )}
 
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-              {task.progress.map((item, index) => (
+              {!task && (
+                <p className="text-sm text-gray-400">Buscando o andamento...</p>
+              )}
+              {task?.progress.map((item, index) => (
                 <div 
                   key={index}
                   className={`p-3 rounded-lg border ${
