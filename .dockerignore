@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+build
+coverage
+.git
+.gitignore
+README.md
+.env*
+!.env.example
+npm-debug.log*
+.DS_Store
+*.tsbuildinfo
+.vercel
