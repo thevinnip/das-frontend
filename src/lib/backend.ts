@@ -6,13 +6,29 @@ export function getDasApiUrl(): string {
   return url.replace(/\/+$/, "");
 }
 
-export const DAS_API_URL = getDasApiUrl();
+export async function readBackendError(response: Response): Promise<string> {
+  const text = await response.text();
+
+  try {
+    const json = JSON.parse(text) as { error?: string };
+    if (json?.error) return json.error;
+  } catch {
+    // resposta não veio em JSON
+  }
+
+  if (text.trim()) {
+    return text.trim().slice(0, 300);
+  }
+
+  return `Erro HTTP ${response.status} ao falar com o backend DAS`;
+}
 
 export async function fetchDasBackend(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
-  const url = `${DAS_API_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const baseUrl = getDasApiUrl();
+  const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 
   try {
     return await fetch(url, {
@@ -21,7 +37,7 @@ export async function fetchDasBackend(
     });
   } catch {
     throw new Error(
-      `Não foi possível conectar ao servidor DAS (${DAS_API_URL}). Defina a variável DAS_API_URL no ambiente do frontend se precisar mudar o host.`
+      `Não foi possível conectar ao servidor DAS (${baseUrl}). Verifique se o das-backend está no ar na porta 4031. No Docker no mesmo VPS, use DAS_API_URL=http://host.docker.internal:4031.`
     );
   }
 }

@@ -1,0 +1,12 @@
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        DAS_API_URL: ${DAS_API_URL:-http://host.docker.internal:4031}
+    ports:
+      - "3000:3000"
+    environment:
+      DAS_API_URL: ${DAS_API_URL:-http://host.docker.internal:4031}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

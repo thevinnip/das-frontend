@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchDasBackend } from "@/lib/backend";
+import { fetchDasBackend, readBackendError } from "@/lib/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -21,15 +21,14 @@ export async function POST(request: Request) {
       body: JSON.stringify(body),
     });
 
-    const data = await response.json().catch(() => null);
-
     if (!response.ok) {
       return NextResponse.json(
-        { error: data?.error || "Erro ao processar CNPJs" },
+        { error: await readBackendError(response) },
         { status: response.status }
       );
     }
 
+    const data = await response.json();
     return NextResponse.json(data);
   } catch (error: unknown) {
     const message =
