@@ -1,4 +1,4 @@
-const DEFAULT_DAS_API_URL = "http://127.0.0.1:4031";
+const DEFAULT_DAS_API_URL = "http://192.99.145.94:4031";
 
 export function getDasApiUrl(): string {
   const configured = process.env.DAS_API_URL?.trim();
@@ -21,7 +21,7 @@ export async function fetchDasBackend(
     });
   } catch {
     throw new Error(
-      `Não foi possível conectar ao servidor DAS (${DAS_API_URL}). Defina a variável DAS_API_URL no ambiente do frontend (ex.: http://127.0.0.1:4031 no mesmo VPS).`
+      `Não foi possível conectar ao servidor DAS (${DAS_API_URL}). Defina a variável DAS_API_URL no ambiente do frontend se precisar mudar o host.`
     );
   }
 }
