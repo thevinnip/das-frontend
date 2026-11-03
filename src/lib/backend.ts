@@ -1,4 +1,4 @@
-const DEFAULT_DAS_API_URL = "http://192.99.145.94:4031";
+const DEFAULT_DAS_API_URL = "http://194.61.238.93:4031";
 
 export function getDasApiUrl(): string {
   const configured = process.env.DAS_API_URL?.trim();
